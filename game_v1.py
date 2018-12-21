@@ -1,7 +1,8 @@
 import pygame
 import random
+from time import sleep
 
-manual_control = True
+manual_control = False
 
 black = (0,0,0)
 red = (255,0,0)
@@ -21,11 +22,10 @@ class Game:
         self.font = pygame.font.SysFont("comicsansms", 24)
         
         self.bs = BlockSpawner(self)
-        self.players = []
         if manual_control:
-            self.players.append(ManualPlayer(self))
+            self.E = ManualPlayer(self)
         else:
-            pass
+            self.E = EvolutionV1(self)
         
         self.rungame()
         
@@ -39,9 +39,8 @@ class Game:
             self.screen.fill((255, 255, 255))
             self.deltatime = self.clock.tick(50)
             self.bs.update()
-            for player in self.players:
-                if player.alive:
-                    player.update()
+            if self.E.alive:
+                self.E.update()
             
             pygame.display.flip()
             
@@ -76,14 +75,20 @@ class BlockSpawner:
 
 
 class Block:
-    speeddenom = 6
+    startspeeddenom = 6
+    speedmultipdenom = 60
+    speeddenommin = 1
     def __init__(self, game):
         self.game = game
+        self.speeddenom = self.startspeeddenom
         #self.active = True
         self.rect = pygame.Rect(640, 145, 15, 15)
         
     def update(self):
-        movequant = self.game.deltatime / self.speeddenom
+        multiplier = int(self.game.E.score / self.speedmultipdenom) + 1
+        if multiplier < self.speeddenommin:
+            multiplier = self.speeddenommin
+        movequant = (self.game.deltatime / self.speeddenom) * multiplier
         
         self.rect.move_ip(-movequant, 0)
         pygame.draw.rect(self.game.screen, red, self.rect)
@@ -92,6 +97,7 @@ class Block:
         
 class Player:
     defaultheight = 150
+    defaultx = 20
     r = 8 # radius
     scoredenom = 100
     
@@ -101,14 +107,14 @@ class Player:
         self.game = game
         #self.height = self.defaultheight
         self.direction = 0
-        self.rect = pygame.Rect(20, self.defaultheight - int(self.r / 2), self.r, self.r)
+        self.rect = pygame.Rect(self.defaultx, self.defaultheight - int(self.r / 2), self.r, self.r)
         self.jumpspeeddenom = jumpspeeddenom
         self.jumpheight = jumpheight
         self.score = 0
         self.rawscore = 0
         
     def update(self):
-        self.rawscore += int(self.game.deltatime / Block.speeddenom)
+        self.rawscore += int(self.game.deltatime / self.game.bs.blocks[0].speeddenom)
         self.score = int(self.rawscore / self.scoredenom)
         jumpquant = self.game.deltatime / self.jumpspeeddenom
         self.rect.move_ip(0, jumpquant * self.direction * -1)
@@ -120,22 +126,106 @@ class Player:
         pygame.draw.circle(self.game.screen, black, self.rect.center, self.r)
         for block in self.game.bs.blocks:
             if self.rect.colliderect(block.rect):
-                self.alive = False
-                print("PLAYER DIED")
+                self.die()
         scoretext = self.game.font.render(str(self.score), True, green)
         self.game.screen.blit(scoretext, (10, 10))
+    
+    def die(self):
+        self.alive = False
+        print("PLAYER {} died at score {}".format(self.playerID, self.score))
         
 class ManualPlayer(Player):
     jumpspeeddenom = 5
     jumpheight = 60
     def __init__(self, game):
         super().__init__(game, self.jumpspeeddenom, self.jumpheight)
+        self.playerID = 0
     
     def update(self):
         for e in self.game.events:
             if (e.type == pygame.KEYDOWN and e.key == pygame.K_SPACE) and (self.direction == 0):
                 self.direction = 1
         super().update()
+        
+class EvolvedPlayer(Player):
+    def __init__(self, game, ID, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom):
+        self.jumpatdist = jumpatdist
+        self.jadtolerance = jadtolerance
+        self.playerID = ID
+        super().__init__(game, jumpspeeddenom, jumpheight)
+    
+    def update(self):
+        for block in self.game.bs.blocks:
+            if (block.rect.centerx > Player.defaultx + self.jumpatdist - (self.jadtolerance / 2)) and (block.rect.centerx < Player.defaultx + self.jumpatdist + (self.jadtolerance / 2)) and self.direction == 0:
+                self.direction = 1
+        super().update()
+        
+    def die(self):
+        super().die()
+        print("jumpatdist: {0}\njadtolerance: {1}\njumpheight: {2}\njumpspeeddenom: {3}\n".format(self.jumpatdist, self.jadtolerance, self.jumpheight, self.jumpspeeddenom))
+        if self.score > self.game.E.goalscore:
+            print("PLAYER {} HAS REACHED GOAL SCORE, EVOLUTION ENDED\n".format(self.playerID))
+            self.game.E.alive = False
+        
+class EvolutionV1:
+    numplayers = 6
+    numparents = 2
+    maxgenerations = 5
+    goalscore = 100
+    #crossoverpoint = 1
+    minjumpatdist = 0
+    maxjumpatdist = 200
+    minjadtolerance = 0
+    maxjadtolerance = 70
+    minjumpheight = 1
+    maxjumpheight = 150
+    minjumpspeeddenom = 1
+    maxjumpspeeddenom = 20
+    
+    def __init__(self, game):
+        self.game = game
+        self.alive = True
+        self.generation = 0
+        self.players = []
+        self.parents = []
+        self.init()
+        self.score = 0
+    
+    def update(self):
+        for i, player in enumerate(self.players):
+            if player.alive:
+                player.update()
+            else:
+                del self.players[i]
+        if len(self.players) == self.numparents and self.parents == []:
+            for i,p in enumerate(self.players):
+                self.parents.append([p.jumpatdist, p.jadtolerance, p.jumpheight])
+        if len(self.players) == 0:
+            print("Generation Dead")
+            self.breed()
+        try:
+            self.score = self.players[0].score
+        except:
+            self.score = 1
+            
+    def init(self):
+        print("\n---------Generation 0----------")
+        sleep(1)
+        for i in range(self.numplayers):
+            jumpatdist = random.randint(self.minjumpatdist, self.maxjumpatdist)
+            jadtolerance = random.randint(self.minjadtolerance, self.maxjadtolerance)
+            jumpheight = random.randint(self.minjumpheight, self.maxjumpheight)
+            jumpspeeddenom = random.randint(self.minjumpspeeddenom, self.maxjumpspeeddenom)
+            self.players.append(EvolvedPlayer(self.game, i, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom))
+            
+    def breed(self):
+        self.generation += 1
+        print("\n---------Generation {}----------".format(self.generation))
+        if self.generation >= self.maxgenerations:
+            self.alive = False
+            print("\nEARLY STOP: MAX GENERATIONS REACHED")
+        sleep(2)
+
     
 game = Game()
     
