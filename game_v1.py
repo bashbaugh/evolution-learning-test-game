@@ -49,7 +49,7 @@ class Game:
         pygame.quit()
         
 class BlockSpawner:
-    mindist = 50
+    mindist = 60
     maxdist = 250
     def __init__(self, game):
         self.game = game
@@ -77,18 +77,24 @@ class BlockSpawner:
 
 class Block:
     startspeeddenom = 6
-    speedmultipdenom = 60
-    speeddenommin = 1
+    speedmultipdenom = 300
+    minheight = 10
+    maxheight = 30
+    minwidth = 10
+    maxwidth = 20
+    multipmax = 3
     def __init__(self, game):
         self.game = game
         self.speeddenom = self.startspeeddenom
         #self.active = True
-        self.rect = pygame.Rect(640, 145, 15, 15)
+        w = random.randint(self.minwidth, self.maxwidth)
+        h = random.randint(self.minheight, self.maxheight)
+        self.rect = pygame.Rect(640, 160 - h, w, h)
         
     def update(self):
-        multiplier = int(self.game.E.score / self.speedmultipdenom) + 1
-        if multiplier < self.speeddenommin:
-            multiplier = self.speeddenommin
+        multiplier = (self.game.E.score / self.speedmultipdenom) + 1
+        if multiplier > self.multipmax:
+            multiplier = self.multipmax
         movequant = (self.game.deltatime / self.speeddenom) * multiplier
         
         self.rect.move_ip(-movequant, 0)
@@ -170,18 +176,24 @@ class EvolvedPlayer(Player):
 class EvolutionV1:
     numplayers = 6
     numparents = 3
-    maxgenerations = 15
-    goalscore = 150
-    maxmutation = 10
+    maxgenerations = 40
+    goalscore = 200
+    #improvementavgsamples = 2
+    improvementlookback = 4
+    reinitstagnancethreshhold = 10
+    reinitquant = 3
+    
+    maxmutation = 25
+    maxjsdmutation = 1
     minjumpatdist = 0
     maxjumpatdist = 200
     minjadtolerance = 0
     maxjadtolerance = 70
     minjumpheight = 1
-    maxjumpheight = 150
+    maxjumpheight = 120
     minjumpspeeddenom = 1
-    maxjumpspeeddenom = 12
-    maxjsdmutation = 1
+    maxjumpspeeddenom = 7
+    
     
     def __init__(self, game):
         self.game = game
@@ -193,6 +205,7 @@ class EvolutionV1:
         print("\n---------Generation 0----------")
         #sleep(1)
         self.init(self.numplayers)
+        self.bestscores = []
         self.score = 0
     
     def update(self):
@@ -203,6 +216,7 @@ class EvolutionV1:
                 self.deadplayers.append(self.players.pop(i))
 
         if len(self.players) == 0:
+            self.bestscores.append(self.deadplayers[-1].score)
             print("Generation Dead")
             self.breed()
         try:
@@ -211,7 +225,15 @@ class EvolutionV1:
             self.score = 1
         
         numptext = self.game.font.render(str(len(self.players)), True, green)
+        gentext = self.game.font.render("G" + str(self.generation), True, green)
+        try:
+            lastbests = (self.bestscores[-1] + self.bestscores[-2]) / 2
+            lastscoretext = self.game.font.render("last bests: " + str(int(lastbests)), True, green)
+        except IndexError:
+            lastscoretext = self.game.font.render("last bests: none", True, green)
         self.game.screen.blit(numptext, (600, 10))
+        self.game.screen.blit(gentext, (500, 10))
+        self.game.screen.blit(lastscoretext, (100, 10))
             
     def init(self, numplayers):
         for i in range(numplayers):
@@ -223,6 +245,24 @@ class EvolutionV1:
             self.nextid += 1
             
     def breed(self):
+        def crossovermutate():
+            assert len(self.deadplayers) == self.numparents
+            #self.deadplayers.sort(key=attrgetter('score'))
+            for i in range(len(self.deadplayers) - 1):
+                for j in range(len(self.deadplayers) - i - 1):
+                    crossoverpoint = random.randint(1,3)
+                    p1 = self.deadplayers[-(i + 1)]
+                    p2 = self.deadplayers[-(i + j + 1)]
+                    parent1 = [p1.jumpatdist, p1.jadtolerance, p1.jumpheight, p1.jumpspeeddenom]
+                    parent2 = [p2.jumpatdist, p2.jadtolerance, p2.jumpheight, p2.jumpspeeddenom]
+                    offspring = parent1[:crossoverpoint] + parent2[crossoverpoint:]
+                    paramtomutate = random.randint(0,3)
+                    if paramtomutate == 3:
+                        offspring[paramtomutate] += random.randint(-self.maxjsdmutation, self.maxjsdmutation)
+                    else:
+                        offspring[paramtomutate] += random.randint(-self.maxmutation, self.maxmutation)
+                    self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3]))
+                    self.nextid += 1
         self.generation += 1
         print("\n---------Generation {}----------".format(self.generation))
         if self.generation >= self.maxgenerations:
@@ -230,26 +270,19 @@ class EvolutionV1:
             print("\nEARLY STOP: MAX GENERATIONS REACHED")
             return
         #sleep(2)
-        assert self.players == []
-        del self.deadplayers[:self.numparents]
-        self.deadplayers.sort(key=attrgetter('score'))
-        for i in range(len(self.deadplayers) - 1):
-            for j in range(len(self.deadplayers) - i - 1):
-                crossoverpoint = random.randint(1,3)
-                p1 = self.deadplayers[i]
-                p2 = self.deadplayers[i + j]
-                parent1 = [p1.jumpatdist, p1.jadtolerance, p1.jumpheight, p1.jumpspeeddenom]
-                parent2 = [p2.jumpatdist, p2.jadtolerance, p2.jumpheight, p2.jumpspeeddenom]
-                offspring = parent1[:crossoverpoint] + parent2[crossoverpoint:]
-                paramtomutate = random.randint(0,3)
-                if paramtomutate == 3:
-                    offspring[paramtomutate] += random.randint(-self.maxjsdmutation, self.maxjsdmutation)
-                else:
-                    offspring[paramtomutate] += random.randint(-self.maxmutation, self.maxmutation)
-                self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3]))
-                self.nextid += 1
-        if random.randint(0,1):
-            self.init(1)
+        del self.deadplayers[:len(self.deadplayers) - self.numparents]            
+        if len(self.bestscores) >= self.improvementlookback + 1:
+            bestavg = (self.bestscores[-1] + self.bestscores[-2]) / 2
+            lookbackavg = self.bestscores[-self.improvementlookback] + self.bestscores[-(self.improvementlookback + 1)] / 2
+            if bestavg - lookbackavg < self.reinitstagnancethreshhold:
+                print("Stagnance detected: initializing {} new players".format(self.reinitquant))
+                self.init(3)
+            else:
+                crossovermutate()
+        else:
+            crossovermutate()
+            
+        self.init(1)
         for p in self.deadplayers:
             p.alive = True
             p.rawscore = 0
