@@ -176,7 +176,7 @@ class EvolvedPlayer(Player):
 class EvolutionV1:
     numplayers = 6
     numparents = 3
-    maxgenerations = 40
+    maxgenerations = 80
     goalscore = 200
     #improvementavgsamples = 2
     improvementlookback = 4
@@ -206,6 +206,7 @@ class EvolutionV1:
         #sleep(1)
         self.init(self.numplayers)
         self.bestscores = []
+        self.justreinit = True
         self.score = 0
     
     def update(self):
@@ -231,9 +232,12 @@ class EvolutionV1:
             lastscoretext = self.game.font.render("last bests: " + str(int(lastbests)), True, green)
         except IndexError:
             lastscoretext = self.game.font.render("last bests: none", True, green)
+        ritext = self.game.font.render("REINIT", True, green)
         self.game.screen.blit(numptext, (600, 10))
         self.game.screen.blit(gentext, (500, 10))
         self.game.screen.blit(lastscoretext, (100, 10))
+        if self.justreinit:
+            self.game.screen.blit(ritext, (300, 10))
             
     def init(self, numplayers):
         for i in range(numplayers):
@@ -246,6 +250,7 @@ class EvolutionV1:
             
     def breed(self):
         def crossovermutate():
+            self.justreinit = False
             assert len(self.deadplayers) == self.numparents
             #self.deadplayers.sort(key=attrgetter('score'))
             for i in range(len(self.deadplayers) - 1):
@@ -277,6 +282,7 @@ class EvolutionV1:
             if bestavg - lookbackavg < self.reinitstagnancethreshhold:
                 print("Stagnance detected: initializing {} new players".format(self.reinitquant))
                 self.init(3)
+                self.justreinit = True
             else:
                 crossovermutate()
         else:
