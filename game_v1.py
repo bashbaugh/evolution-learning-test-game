@@ -122,7 +122,8 @@ class Player:
     def update(self):
         self.rawscore += int(self.game.deltatime / self.game.bs.blocks[0].speeddenom)
         self.score = int(self.rawscore / self.scoredenom)
-        jumpquant = self.game.deltatime / self.jumpspeeddenom
+        jsd = self.jumpspeeddenom + (((self.game.E.score / self.game.bs.blocks[0].speedmultipdenom) + 1) * self.jsdmultipfactor)
+        jumpquant = self.game.deltatime / jsd
         self.rect.move_ip(0, jumpquant * self.direction * -1)
         if self.rect.centery <= self.defaultheight - self.jumpheight:
             self.direction = -1
@@ -145,6 +146,7 @@ class ManualPlayer(Player):
     jumpheight = 60
     def __init__(self, game):
         super().__init__(game, self.jumpspeeddenom, self.jumpheight)
+        self.jsdmultipfactor = 0
         self.playerID = 0
     
     def update(self):
@@ -154,9 +156,10 @@ class ManualPlayer(Player):
         super().update()
         
 class EvolvedPlayer(Player):
-    def __init__(self, game, ID, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom):
+    def __init__(self, game, ID, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom, jsdmultipfactor):
         self.jumpatdist = jumpatdist
         self.jadtolerance = jadtolerance
+        self.jsdmultipfactor = jsdmultipfactor
         self.playerID = ID
         super().__init__(game, jumpspeeddenom, jumpheight)
     
@@ -168,7 +171,7 @@ class EvolvedPlayer(Player):
         
     def die(self):
         super().die()
-        print("jumpatdist: {0}\njadtolerance: {1}\njumpheight: {2}\njumpspeeddenom: {3}\n".format(self.jumpatdist, self.jadtolerance, self.jumpheight, self.jumpspeeddenom))
+        print("jumpatdist: {0}\njadtolerance: {1}\njumpheight: {2}\njumpspeeddenom: {3}\njsdmultipfactor: {4}\n".format(self.jumpatdist, self.jadtolerance, self.jumpheight, self.jumpspeeddenom, self.jsdmultipfactor))
         if self.score > self.game.E.goalscore:
             print("PLAYER {} HAS REACHED GOAL SCORE, EVOLUTION ENDED\n".format(self.playerID))
             self.game.E.alive = False
@@ -177,7 +180,7 @@ class EvolutionV1:
     numplayers = 6
     numparents = 3
     maxgenerations = 80
-    goalscore = 200
+    goalscore = 1000
     #improvementavgsamples = 2
     improvementlookback = 4
     reinitstagnancethreshhold = 10
@@ -193,6 +196,9 @@ class EvolutionV1:
     maxjumpheight = 120
     minjumpspeeddenom = 1
     maxjumpspeeddenom = 7
+    minjsdmultipfactor = -7
+    maxjsdmultipfactor = 7
+    
     
     
     def __init__(self, game):
@@ -227,17 +233,13 @@ class EvolutionV1:
         
         numptext = self.game.font.render(str(len(self.players)), True, green)
         gentext = self.game.font.render("G" + str(self.generation), True, green)
-        try:
-            lastbests = (self.bestscores[-1] + self.bestscores[-2]) / 2
-            lastscoretext = self.game.font.render("last bests: " + str(int(lastbests)), True, green)
-        except IndexError:
-            lastscoretext = self.game.font.render("last bests: none", True, green)
+        lastscoretext = self.game.font.render("last bests: {}".format(str(self.bestscores[-4:])), True, green)
         ritext = self.game.font.render("REINIT", True, green)
         self.game.screen.blit(numptext, (600, 10))
         self.game.screen.blit(gentext, (500, 10))
         self.game.screen.blit(lastscoretext, (100, 10))
         if self.justreinit:
-            self.game.screen.blit(ritext, (300, 10))
+            self.game.screen.blit(ritext, (400, 10))
             
     def init(self, numplayers):
         for i in range(numplayers):
@@ -245,7 +247,8 @@ class EvolutionV1:
             jadtolerance = random.randint(self.minjadtolerance, self.maxjadtolerance)
             jumpheight = random.randint(self.minjumpheight, self.maxjumpheight)
             jumpspeeddenom = random.randint(self.minjumpspeeddenom, self.maxjumpspeeddenom)
-            self.players.append(EvolvedPlayer(self.game, self.nextid, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom))
+            jsdmultipfactor = random.uniform(self.minjsdmultipfactor, self.maxjsdmultipfactor)
+            self.players.append(EvolvedPlayer(self.game, self.nextid, jumpatdist, jadtolerance, jumpheight, jumpspeeddenom, jsdmultipfactor))
             self.nextid += 1
             
     def breed(self):
@@ -255,18 +258,18 @@ class EvolutionV1:
             #self.deadplayers.sort(key=attrgetter('score'))
             for i in range(len(self.deadplayers) - 1):
                 for j in range(len(self.deadplayers) - i - 1):
-                    crossoverpoint = random.randint(1,3)
+                    crossoverpoint = random.randint(1,4)
                     p1 = self.deadplayers[-(i + 1)]
                     p2 = self.deadplayers[-(i + j + 1)]
-                    parent1 = [p1.jumpatdist, p1.jadtolerance, p1.jumpheight, p1.jumpspeeddenom]
-                    parent2 = [p2.jumpatdist, p2.jadtolerance, p2.jumpheight, p2.jumpspeeddenom]
+                    parent1 = [p1.jumpatdist, p1.jadtolerance, p1.jumpheight, p1.jumpspeeddenom, p1.jsdmultipfactor]
+                    parent2 = [p2.jumpatdist, p2.jadtolerance, p2.jumpheight, p2.jumpspeeddenom, p2.jsdmultipfactor]
                     offspring = parent1[:crossoverpoint] + parent2[crossoverpoint:]
-                    paramtomutate = random.randint(0,3)
+                    paramtomutate = random.randint(0,4)
                     if paramtomutate == 3:
                         offspring[paramtomutate] += random.randint(-self.maxjsdmutation, self.maxjsdmutation)
                     else:
                         offspring[paramtomutate] += random.randint(-self.maxmutation, self.maxmutation)
-                    self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3]))
+                    self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3], offspring[4]))
                     self.nextid += 1
         self.generation += 1
         print("\n---------Generation {}----------".format(self.generation))
