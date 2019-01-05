@@ -4,6 +4,7 @@ from operator import attrgetter
 from time import sleep
 
 manual_control = False
+speedup = 0
 
 black = (0,0,0)
 red = (255,0,0)
@@ -38,7 +39,7 @@ class Game:
                 if (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE) or (e.type == pygame.QUIT):
                     self.done = True
             self.screen.fill((255, 255, 255))
-            self.deltatime = self.clock.tick(50)
+            self.deltatime = self.clock.tick(50) + speedup
             self.bs.update()
             if self.E.alive:
                 self.E.update()
@@ -179,15 +180,17 @@ class EvolvedPlayer(Player):
 class EvolutionV1:
     numplayers = 6
     numparents = 3
-    maxgenerations = 80
+    keepparents = False
+    maxgenerations = 100
     goalscore = 1000
     #improvementavgsamples = 2
     improvementlookback = 4
-    reinitstagnancethreshhold = 10
-    reinitquant = 3
+    reinitstagnancethreshhold = 20
+    reinitquant = 2
     
     maxmutation = 25
     maxjsdmutation = 1
+    maxjsdmfmutation = 2
     minjumpatdist = 0
     maxjumpatdist = 200
     minjadtolerance = 0
@@ -239,7 +242,7 @@ class EvolutionV1:
         self.game.screen.blit(gentext, (500, 10))
         self.game.screen.blit(lastscoretext, (100, 10))
         if self.justreinit:
-            self.game.screen.blit(ritext, (400, 10))
+            self.game.screen.blit(ritext, (350, 10))
             
     def init(self, numplayers):
         for i in range(numplayers):
@@ -267,8 +270,11 @@ class EvolutionV1:
                     paramtomutate = random.randint(0,4)
                     if paramtomutate == 3:
                         offspring[paramtomutate] += random.randint(-self.maxjsdmutation, self.maxjsdmutation)
+                    elif paramtomutate == 4:
+                        offspring[paramtomutate] += random.uniform(-self.maxjsdmfmutation, self.maxjsdmfmutation)
                     else:
                         offspring[paramtomutate] += random.randint(-self.maxmutation, self.maxmutation)
+                    print("param {} mutated".format(paramtomutate))
                     self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3], offspring[4]))
                     self.nextid += 1
         self.generation += 1
@@ -277,26 +283,24 @@ class EvolutionV1:
             self.alive = False
             print("\nEARLY STOP: MAX GENERATIONS REACHED")
             return
-        #sleep(2)
-        del self.deadplayers[:len(self.deadplayers) - self.numparents]            
+        del self.deadplayers[:-self.numparents]            
         if len(self.bestscores) >= self.improvementlookback + 1:
             bestavg = (self.bestscores[-1] + self.bestscores[-2]) / 2
-            lookbackavg = self.bestscores[-self.improvementlookback] + self.bestscores[-(self.improvementlookback + 1)] / 2
+            lookbackavg = (self.bestscores[-self.improvementlookback] + self.bestscores[-(self.improvementlookback + 1)]) / 2
             if bestavg - lookbackavg < self.reinitstagnancethreshhold:
                 print("Stagnance detected: initializing {} new players".format(self.reinitquant))
-                self.init(3)
+                self.init(self.reinitquant)
                 self.justreinit = True
-            else:
-                crossovermutate()
+        crossovermutate()
+            
+        if self.keepparents:
+            for p in self.deadplayers:
+                p.alive = True
+                p.rawscore = 0
+                p.direction = -1
+                self.players.append(p)
         else:
             crossovermutate()
-            
-        self.init(1)
-        for p in self.deadplayers:
-            p.alive = True
-            p.rawscore = 0
-            p.direction = -1
-            self.players.append(p)
 
         self.deadplayers = []
         self.game.bs.blocks = []
