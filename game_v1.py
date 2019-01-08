@@ -1,3 +1,7 @@
+# Evolution learning game 1
+# By Benjamin A.
+# https://github.com/scitronboy/evolution-learning-test-game
+
 import pygame
 import random
 from operator import attrgetter
@@ -77,7 +81,7 @@ class BlockSpawner:
 
 
 class Block:
-    startspeeddenom = 6
+    speeddenom = 6
     speedmultipdenom = 300
     minheight = 10
     maxheight = 30
@@ -86,7 +90,6 @@ class Block:
     multipmax = 3
     def __init__(self, game):
         self.game = game
-        self.speeddenom = self.startspeeddenom
         #self.active = True
         w = random.randint(self.minwidth, self.maxwidth)
         h = random.randint(self.minheight, self.maxheight)
@@ -181,8 +184,8 @@ class EvolutionV1:
     numplayers = 6
     numparents = 3
     keepparents = False
-    maxgenerations = 100
-    goalscore = 1000
+    maxgenerations = 300 
+    goalscore = 2000
     #improvementavgsamples = 2
     improvementlookback = 4
     reinitstagnancethreshhold = 20
@@ -238,11 +241,14 @@ class EvolutionV1:
         gentext = self.game.font.render("G" + str(self.generation), True, green)
         lastscoretext = self.game.font.render("last bests: {}".format(str(self.bestscores[-4:])), True, green)
         ritext = self.game.font.render("REINIT", True, green)
+        multiptext = self.game.font.render("{}%".format(str(int(((self.score / Block.speedmultipdenom)) / (Block.multipmax - 1)* 100))), True, green)
+        
         self.game.screen.blit(numptext, (600, 10))
         self.game.screen.blit(gentext, (500, 10))
         self.game.screen.blit(lastscoretext, (100, 10))
+        self.game.screen.blit(multiptext, (50, 10))
         if self.justreinit:
-            self.game.screen.blit(ritext, (350, 10))
+            self.game.screen.blit(ritext, (400, 10))
             
     def init(self, numplayers):
         for i in range(numplayers):
@@ -256,7 +262,6 @@ class EvolutionV1:
             
     def breed(self):
         def crossovermutate():
-            self.justreinit = False
             assert len(self.deadplayers) == self.numparents
             #self.deadplayers.sort(key=attrgetter('score'))
             for i in range(len(self.deadplayers) - 1):
@@ -291,6 +296,11 @@ class EvolutionV1:
                 print("Stagnance detected: initializing {} new players".format(self.reinitquant))
                 self.init(self.reinitquant)
                 self.justreinit = True
+            else:
+                self.justreinit = False
+        else:
+            self.justreinit = False
+                
         crossovermutate()
             
         if self.keepparents:
@@ -312,4 +322,3 @@ class EvolutionV1:
 
     
 game = Game()
-    
