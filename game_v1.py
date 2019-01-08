@@ -279,7 +279,7 @@ class EvolutionV1:
                         offspring[paramtomutate] += random.uniform(-self.maxjsdmfmutation, self.maxjsdmfmutation)
                     else:
                         offspring[paramtomutate] += random.randint(-self.maxmutation, self.maxmutation)
-                    print("param {} mutated".format(paramtomutate))
+                    #print("param {} mutated".format(paramtomutate))
                     self.players.append(EvolvedPlayer(self.game, self.nextid, offspring[0], offspring[1], offspring[2], offspring[3], offspring[4]))
                     self.nextid += 1
         self.generation += 1
@@ -315,7 +315,7 @@ class EvolutionV1:
         self.deadplayers = []
         self.game.bs.blocks = []
         self.game.bs.spawn = True
-        print("Offspring generated, running game\n")
+        print("Offspring generated, running game with {} players\n".format(str(len(self.players)))
             
             
             
